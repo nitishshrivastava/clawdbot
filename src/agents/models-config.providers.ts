@@ -580,8 +580,13 @@ export async function resolveImplicitProviders(params: {
     resolveEnvApiKeyVarName("digitalocean") ??
     resolveApiKeyFromProfiles({ provider: "digitalocean", store: authStore });
   if (digitaloceanKey) {
+    // Discovery needs the actual API key value, not the env var name.
+    // resolveEnvApiKeyVarName returns the var name (e.g. "DIGITALOCEAN_API_KEY");
+    // resolve it to the real value for the authenticated /v1/models call.
+    const envResolved = resolveEnvApiKey("digitalocean");
+    const actualKey = envResolved?.apiKey ?? digitaloceanKey;
     providers.digitalocean = {
-      ...(await buildDigitalOceanProvider(digitaloceanKey)),
+      ...(await buildDigitalOceanProvider(actualKey)),
       apiKey: digitaloceanKey,
     };
   }
