@@ -21,6 +21,7 @@ import {
   TOGETHER_MODEL_CATALOG,
   buildTogetherModelDefinition,
 } from "./together-models.js";
+import { discoverDigitalOceanModels, DIGITALOCEAN_BASE_URL } from "./digitalocean-models.js";
 import { discoverVeniceModels, VENICE_BASE_URL } from "./venice-models.js";
 
 type ModelsConfig = NonNullable<OpenClawConfig["models"]>;
@@ -401,6 +402,15 @@ export function buildXiaomiProvider(): ProviderConfig {
   };
 }
 
+async function buildDigitalOceanProvider(apiKey: string): Promise<ProviderConfig> {
+  const models = await discoverDigitalOceanModels(apiKey);
+  return {
+    baseUrl: DIGITALOCEAN_BASE_URL,
+    api: "openai-completions",
+    models,
+  };
+}
+
 async function buildVeniceProvider(): Promise<ProviderConfig> {
   const models = await discoverVeniceModels();
   return {
@@ -564,6 +574,16 @@ export async function resolveImplicitProviders(params: {
     resolveApiKeyFromProfiles({ provider: "qianfan", store: authStore });
   if (qianfanKey) {
     providers.qianfan = { ...buildQianfanProvider(), apiKey: qianfanKey };
+  }
+
+  const digitaloceanKey =
+    resolveEnvApiKeyVarName("digitalocean") ??
+    resolveApiKeyFromProfiles({ provider: "digitalocean", store: authStore });
+  if (digitaloceanKey) {
+    providers.digitalocean = {
+      ...(await buildDigitalOceanProvider(digitaloceanKey)),
+      apiKey: digitaloceanKey,
+    };
   }
 
   return providers;
