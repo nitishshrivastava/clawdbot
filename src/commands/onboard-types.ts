@@ -9,6 +9,7 @@ export type AuthChoice =
   | "claude-cli"
   | "token"
   | "chutes"
+  | "vllm"
   | "openai-codex"
   | "openai-api-key"
   | "openrouter-api-key"
@@ -21,6 +22,7 @@ export type AuthChoice =
   | "synthetic-api-key"
   | "venice-api-key"
   | "together-api-key"
+  | "huggingface-api-key"
   | "codex-cli"
   | "apiKey"
   | "gemini-api-key"
@@ -51,6 +53,7 @@ export type AuthChoiceGroupId =
   | "google"
   | "copilot"
   | "openrouter"
+  | "litellm"
   | "ai-gateway"
   | "cloudflare-ai-gateway"
   | "moonshot"
@@ -61,6 +64,8 @@ export type AuthChoiceGroupId =
   | "synthetic"
   | "venice"
   | "qwen"
+  | "together"
+  | "huggingface"
   | "qianfan"
   | "xai"
   | "custom";
@@ -108,6 +113,7 @@ export type OnboardOptions = {
   syntheticApiKey?: string;
   veniceApiKey?: string;
   togetherApiKey?: string;
+  huggingfaceApiKey?: string;
   opencodeZenApiKey?: string;
   xaiApiKey?: string;
   qianfanApiKey?: string;
