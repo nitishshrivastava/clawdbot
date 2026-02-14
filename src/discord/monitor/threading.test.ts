@@ -115,6 +115,7 @@ describe("resolveDiscordReplyDeliveryPlan", () => {
 
 describe("maybeCreateDiscordAutoThread", () => {
   it("returns existing thread ID when creation fails due to race condition", async () => {
+    // First call succeeds (simulating another agent creating the thread)
     const client = {
       rest: {
         post: async () => {
@@ -208,6 +209,31 @@ describe("resolveDiscordAutoThreadReplyPlan", () => {
         peer: { kind: "channel", id: "thread" },
       }),
     );
+  });
+
+  it("routes replies to an existing thread channel", async () => {
+    const client = { rest: { post: async () => ({ id: "thread" }) } } as unknown as Client;
+    const plan = await resolveDiscordAutoThreadReplyPlan({
+      client,
+      message: {
+        id: "m1",
+        channelId: "parent",
+      } as unknown as import("./listeners.js").DiscordMessageEvent["message"],
+      isGuildMessage: true,
+      channelConfig: {
+        autoThread: true,
+      } as unknown as import("./allow-list.js").DiscordChannelConfigResolved,
+      threadChannel: { id: "thread" },
+      baseText: "hello",
+      combinedBody: "hello",
+      replyToMode: "all",
+      agentId: "agent",
+      channel: "discord",
+    });
+    expect(plan.deliverTarget).toBe("channel:thread");
+    expect(plan.replyTarget).toBe("channel:thread");
+    expect(plan.replyReference.use()).toBe("m1");
+    expect(plan.autoThreadContext).toBeNull();
   });
 
   it("does nothing when autoThread is disabled", async () => {
