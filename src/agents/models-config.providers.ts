@@ -823,6 +823,7 @@ export async function resolveImplicitProviders(params: {
       ...(await buildDigitalOceanProvider(actualKey)),
       apiKey: digitaloceanKey,
     };
+  }
 
   const nvidiaKey =
     resolveEnvApiKeyVarName("nvidia") ??
