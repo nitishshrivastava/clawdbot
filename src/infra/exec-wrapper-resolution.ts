@@ -209,6 +209,61 @@ export function unwrapEnvInvocation(argv: string[]): string[] | null {
   });
 }
 
+function envInvocationUsesModifiers(argv: string[]): boolean {
+  let idx = 1;
+  let expectsOptionValue = false;
+  while (idx < argv.length) {
+    const token = argv[idx]?.trim() ?? "";
+    if (!token) {
+      idx += 1;
+      continue;
+    }
+    if (expectsOptionValue) {
+      return true;
+    }
+    if (token === "--" || token === "-") {
+      idx += 1;
+      break;
+    }
+    if (isEnvAssignment(token)) {
+      return true;
+    }
+    if (!token.startsWith("-") || token === "-") {
+      break;
+    }
+    const lower = token.toLowerCase();
+    const [flag] = lower.split("=", 2);
+    if (ENV_FLAG_OPTIONS.has(flag)) {
+      return true;
+    }
+    if (ENV_OPTIONS_WITH_VALUE.has(flag)) {
+      if (lower.includes("=")) {
+        return true;
+      }
+      expectsOptionValue = true;
+      idx += 1;
+      continue;
+    }
+    if (
+      lower.startsWith("-u") ||
+      lower.startsWith("-c") ||
+      lower.startsWith("-s") ||
+      lower.startsWith("--unset=") ||
+      lower.startsWith("--chdir=") ||
+      lower.startsWith("--split-string=") ||
+      lower.startsWith("--default-signal=") ||
+      lower.startsWith("--ignore-signal=") ||
+      lower.startsWith("--block-signal=")
+    ) {
+      return true;
+    }
+    // Unknown env flags are treated conservatively as modifiers.
+    return true;
+  }
+
+  return false;
+}
+
 function unwrapNiceInvocation(argv: string[]): string[] | null {
   return scanWrapperInvocation(argv, {
     separators: new Set(["--"]),
@@ -345,31 +400,51 @@ export function unwrapDispatchWrappersForResolution(
   return current;
 }
 
-function extractPosixShellInlineCommand(argv: string[]): string | null {
-  for (let i = 1; i < argv.length; i += 1) {
-    const token = argv[i]?.trim();
-    if (!token) {
-      continue;
-    }
-    const lower = token.toLowerCase();
-    if (lower === "--") {
-      break;
-    }
-    if (POSIX_INLINE_COMMAND_FLAGS.has(lower)) {
-      const cmd = argv[i + 1]?.trim();
-      return cmd ? cmd : null;
-    }
-    if (/^-[^-]*c[^-]*$/i.test(token)) {
-      const commandIndex = lower.indexOf("c");
-      const inline = token.slice(commandIndex + 1).trim();
-      if (inline) {
-        return inline;
-      }
-      const cmd = argv[i + 1]?.trim();
-      return cmd ? cmd : null;
-    }
+function hasEnvManipulationBeforeShellWrapperInternal(
+  argv: string[],
+  depth: number,
+  envManipulationSeen: boolean,
+): boolean {
+  if (depth >= MAX_DISPATCH_WRAPPER_DEPTH) {
+    return false;
   }
-  return null;
+
+  const token0 = argv[0]?.trim();
+  if (!token0) {
+    return false;
+  }
+
+  const dispatchUnwrap = unwrapKnownDispatchWrapperInvocation(argv);
+  if (dispatchUnwrap.kind === "blocked") {
+    return false;
+  }
+  if (dispatchUnwrap.kind === "unwrapped") {
+    const nextEnvManipulationSeen =
+      envManipulationSeen || (dispatchUnwrap.wrapper === "env" && envInvocationUsesModifiers(argv));
+    return hasEnvManipulationBeforeShellWrapperInternal(
+      dispatchUnwrap.argv,
+      depth + 1,
+      nextEnvManipulationSeen,
+    );
+  }
+
+  const wrapper = findShellWrapperSpec(normalizeExecutableToken(token0));
+  if (!wrapper) {
+    return false;
+  }
+  const payload = extractShellWrapperPayload(argv, wrapper);
+  if (!payload) {
+    return false;
+  }
+  return envManipulationSeen;
+}
+
+export function hasEnvManipulationBeforeShellWrapper(argv: string[]): boolean {
+  return hasEnvManipulationBeforeShellWrapperInternal(argv, 0, false);
+}
+
+function extractPosixShellInlineCommand(argv: string[]): string | null {
+  return extractInlineCommandByFlags(argv, POSIX_INLINE_COMMAND_FLAGS, { allowCombinedC: true });
 }
 
 function extractCmdInlineCommand(argv: string[]): string | null {
@@ -389,6 +464,14 @@ function extractCmdInlineCommand(argv: string[]): string | null {
 }
 
 function extractPowerShellInlineCommand(argv: string[]): string | null {
+  return extractInlineCommandByFlags(argv, POWERSHELL_INLINE_COMMAND_FLAGS);
+}
+
+function extractInlineCommandByFlags(
+  argv: string[],
+  flags: ReadonlySet<string>,
+  options: { allowCombinedC?: boolean } = {},
+): string | null {
   for (let i = 1; i < argv.length; i += 1) {
     const token = argv[i]?.trim();
     if (!token) {
@@ -398,7 +481,16 @@ function extractPowerShellInlineCommand(argv: string[]): string | null {
     if (lower === "--") {
       break;
     }
-    if (POWERSHELL_INLINE_COMMAND_FLAGS.has(lower)) {
+    if (flags.has(lower)) {
+      const cmd = argv[i + 1]?.trim();
+      return cmd ? cmd : null;
+    }
+    if (options.allowCombinedC && /^-[^-]*c[^-]*$/i.test(token)) {
+      const commandIndex = lower.indexOf("c");
+      const inline = token.slice(commandIndex + 1).trim();
+      if (inline) {
+        return inline;
+      }
       const cmd = argv[i + 1]?.trim();
       return cmd ? cmd : null;
     }
